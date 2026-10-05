@@ -29,6 +29,14 @@ interface RideDetails {
   [key: string]: unknown;
 }
 
+interface UpdateRideInput {
+  title?: string;
+  deviceId?: string;
+  notes?: string;
+  updatedAt: number;
+  [key: string]: any; // Zorgt ervoor dat Firestore update() tevreden is!
+}
+
 // Create
 export const upload = onRequest(async (req, res) => {
   if (req.method !== "POST") {
@@ -133,6 +141,56 @@ export const getRideDetails = onRequest(async (req, res) => {
   } catch (error) {
     logger.error("Fout bij ophalen rit details", error);
     res.status(500).json({ error: "Ophalen details mislukt" });
+  }
+});
+
+// UPDATE ONE
+export const updateRide = onRequest(async (req, res) => {
+  if (req.method !== "PUT" && req.method !== "PATCH") {
+    res.status(405).send("Alleen PUT of PATCH methode toegestaan");
+    return;
+  }
+
+  const rideId = req.query.rideId as string;
+
+  if (!rideId) {
+    res.status(400).json({ success: false, error: "rideId is verplicht" });
+    return;
+  }
+
+  const { title, deviceId, notes } = req.body;
+
+  try {
+    const rideRef = db.collection("rides").doc(rideId);
+    const rideDoc = await rideRef.get();
+
+    if (!rideDoc.exists) {
+      res.status(404).json({ success: false, error: "Rit niet gevonden" });
+      return;
+    }
+
+    // 4. Stel de velden samen die geüpdatet moeten worden
+    const updateData: UpdateRideInput = {
+      updatedAt: Date.now(),
+    };
+
+    if (title !== undefined) updateData.title = title;
+    if (deviceId !== undefined) updateData.deviceId = deviceId;
+    if (notes !== undefined) updateData.notes = notes;
+
+    // 5. Update het document in Firestore (.update past alleen meegegeven velden aan)
+    await rideRef.update(updateData);
+
+    logger.info(`Rit ${rideId} succesvol bijgewerkt`, updateData);
+
+    res.status(200).json({
+      success: true,
+      message: `Rit ${rideId} succesvol bijgewerkt`,
+      updatedFields: updateData,
+    });
+  } catch (error) {
+    logger.error("Fout bij bijwerken van rit", error);
+    res.status(500).json({ success: false, error: "Bijwerken mislukt" });
   }
 });
 
